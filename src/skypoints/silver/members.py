@@ -63,5 +63,9 @@ def load_batch(conn: Any, database: str, batch_date: date) -> tuple[int, int]:
 
 
 def bronze_batch_dates(cur: Any) -> list[date]:
-    cur.execute(f"SELECT DISTINCT BATCH_DATE FROM {BRONZE_MEMBERS} ORDER BY 1")
+    """Every batch date present in either Bronze feed, oldest first."""
+    cur.execute(
+        f"SELECT BATCH_DATE FROM {BRONZE_MEMBERS} "
+        "UNION SELECT BATCH_DATE FROM BRONZE.REDEMPTION_RAW ORDER BY 1"
+    )
     return [row[0] for row in cur.fetchall()]

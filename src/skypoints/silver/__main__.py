@@ -7,13 +7,14 @@ import logging
 from datetime import datetime
 
 from skypoints.config import SnowflakeSettings
+from skypoints.silver import redemptions
 from skypoints.silver.current import apply_batch
 from skypoints.silver.members import bronze_batch_dates, load_batch
 from skypoints.snowflake_conn import connect
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Build Silver member tables from Bronze.")
+    parser = argparse.ArgumentParser(description="Build Silver tables from Bronze.")
     parser.add_argument("--batch-date", help="YYYYMMDD; omit to process every Bronze batch")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -28,6 +29,8 @@ def main(argv: list[str] | None = None) -> None:
         for batch_date in batches:  # oldest first, so later batches build on earlier ones
             load_batch(conn, settings.database, batch_date)
             apply_batch(conn, settings.database, batch_date)
+            # Members first, so the orphan check sees members that arrived the same day.
+            redemptions.load_batch(conn, settings.database, batch_date)
 
 
 if __name__ == "__main__":
