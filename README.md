@@ -34,3 +34,16 @@ py -3.12 -m venv .venv
 pip install -e ".[dev]"
 ruff check . ; pytest -q
 ```
+
+## Sample data (simulated source system)
+
+```powershell
+python -m skypoints.datagen --out data/landing --days 3 --members 1000 --seed 42
+```
+
+Per day it writes `MEMBER_PROFILE_YYYYMMDD_06000000.txt`, `REDEMPTIONS_YYYYMMDD.json` and
+`MANIFEST_YYYYMMDD.json`. Day 1 is a full extract; later days are deltas (~10% changed members
+including country moves, ~2% new). About 5% of rows carry injected defects (missing fields,
+invalid/future dates, short or too-long ids, unknown tier/country, dropped DOB leading zero,
+duplicates, orphan and duplicate redemptions). The manifest lists every defect by line number:
+it is the ground truth the pipeline's validations are tested against. Same seed, same files.
