@@ -7,7 +7,7 @@ def test_validate_sql_renders_completely():
     sql = validate_sql("DB.SILVER", date(2024, 1, 15), source="DB.X.RAW")
     assert "{{" not in sql
     assert "FROM DB.X.RAW" in sql
-    assert "LEFT JOIN DB.SILVER.MEMBER_CURRENT" in sql
+    assert "FROM DB.SILVER.MEMBER_CURRENT" in sql  # orphan check
     assert "OUTER => TRUE" in sql  # empty documents are not silently dropped
 
 
