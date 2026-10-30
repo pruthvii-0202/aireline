@@ -20,11 +20,11 @@ JSON feed   ─► REDEMPTION_RAW (VARIANT) ─► REDEMPTION_TXN ─► join on
 
 | # | Brief asks for | Where |
 |---|---|---|
-| 1 | DDL: raw, staging, country tables | raw: [sql/ddl/V003__bronze_tables.sql](sql/ddl/V003__bronze_tables.sql); staging/country: _todo_ |
-| 2 | Staging + Age + Stale_Member | _todo_ |
+| 1 | DDL: raw, staging, country tables | raw: [V003](sql/ddl/V003__bronze_tables.sql); staging: [V004](sql/ddl/V004__silver_member_tables.sql); country: _todo_ |
+| 2 | Staging + Age + Stale_Member | `SILVER.MEMBER_STG` via [member_validate.sql](sql/transform/silver/member_validate.sql) |
 | 3 | Country split, latest record wins | _todo_ |
 | 4 | Flatten JSON + join design | _todo_ |
-| 5 | Validations | _todo_ |
+| 5 | Validations | members: rules in [member_validate.sql](sql/transform/silver/member_validate.sql), rejects in `SILVER.MEMBER_REJECT`; redemptions: _todo_ |
 
 ## Setup
 
@@ -62,3 +62,18 @@ The Bronze loader uploads each file to `BRONZE.LANDING_STG`, runs `COPY INTO`, r
 load in `META.FILE_LOAD_LOG`, and finally reconciles row counts per file against the local
 files. Re-running loads nothing new: files already logged are skipped (a changed file with
 the same name is refused), and Snowflake's COPY load history is a second safety net.
+
+```powershell
+python -m skypoints.silver                    # build MEMBER_STG / MEMBER_REJECT for every batch
+pytest -m integration                         # Snowflake tests (edge cases + manifest coverage)
+```
+
+### Member validation rules (Silver)
+
+| Outcome | Rule |
+|---|---|
+| Reject | missing name / id / enrollment date; invalid date (must be 8 digits and a real date); DOB or enrollment in the future; id > 18 chars; field longer than the layout allows; earlier row for the same member in the batch (`EXACT_DUPLICATE` / `DUPLICATE_KEY_SUPERSEDED`) |
+| Keep + flag | id shorter than 6 (`ID_LENGTH_SUSPECT`); 7-digit DOB repaired (`DOB_REPAIRED`); unknown tier; active flag not A/I; flight before enrollment; flight in the future; country not in `COUNTRY_MAP`; values trimmed or upper-cased |
+
+`AGE` is whole years at the batch date. `STALE_MEMBER` is TRUE when the last flight is more than
+90 days before the batch date, or the member has never flown (`NEVER_FLOWN`).
