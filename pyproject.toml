@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skypoints"
+version = "0.1.0"
+description = "SkyPoints loyalty pipeline: member profile + redemption feeds into Snowflake"
+requires-python = ">=3.10,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+snowflake = ["snowflake-connector-python>=3.12"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["integration: needs a live Snowflake connection"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

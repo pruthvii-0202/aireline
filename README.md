@@ -1,0 +1,36 @@
+# SkyPoints Loyalty Pipeline
+
+Loads two daily feeds for the SkyPoints airline loyalty program into Snowflake:
+
+1. **Member profile flat file** (pipe-delimited, `|H|` header, `|D|` detail rows)
+2. **Redemption JSON feed** (one member object per line, nested `redemptions` array)
+
+Members are validated, de-duplicated (latest record wins) and split into one table per country.
+Redemptions are flattened to one row per transaction and joined back to members on `member_id`.
+
+## Architecture
+
+```
+member file ─► MEMBER_RAW ─► MEMBER_STG (typed, AGE, STALE_MEMBER) ─► MEMBER_CURRENT ─► TABLE_<COUNTRY>
+                                   └─► MEMBER_REJECT (row + reason)
+JSON feed   ─► REDEMPTION_RAW (VARIANT) ─► REDEMPTION_TXN ─► join on member_id
+```
+
+## Deliverables map
+
+| # | Brief asks for | Where |
+|---|---|---|
+| 1 | DDL: raw, staging, country tables | `sql/` |
+| 2 | Staging + Age + Stale_Member | _todo_ |
+| 3 | Country split, latest record wins | _todo_ |
+| 4 | Flatten JSON + join design | _todo_ |
+| 5 | Validations | _todo_ |
+
+## Setup
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+ruff check . ; pytest -q
+```
