@@ -51,6 +51,12 @@ Every table carries audit columns: source file, source row number, batch date, l
 | D6 | Latest wins ordering: batch date, then load time, then file row number | Deterministic even when the same member appears twice in one file | Load time only (ties within a file) |
 | D7 | Derived dates (Age, Stale) use the batch date, not `CURRENT_DATE` | Re-running a past batch gives the same result | `CURRENT_DATE` (results drift on reruns) |
 | D8 | Bad rows go to reject tables with a reason code; fixable issues are repaired and flagged | Nothing is silently dropped; data owners can act on rejects | Failing the whole file |
+| D9 | A member whose latest row has an unknown country moves to `MEMBER_UNMAPPED` (removed from the old country) | Latest record wins consistently; the unmapped table is the alert for fixing `COUNTRY_MAP` | Keep them in the old country until the code is fixed |
+| D10 | A member whose latest row is rejected keeps their previous valid record in `MEMBER_CURRENT` | A bad row should not erase good data; the reject is visible in `MEMBER_REJECT` | Remove the member |
+| D11 | AGE and STALE_MEMBER are refreshed every batch, writing only rows whose value changes | Daily files are deltas, so members not in today's file would otherwise keep yesterday's values; writing only changes keeps cost flat at billions of rows | Rewrite every row daily; or compute at query time in a view |
+| D12 | Merge, refresh and every country-table sync for a batch run in one transaction | A reader never sees a member in two country tables, or in none, mid-move | Separate statements |
+| D13 | Age and staleness rules are SQL UDFs (`AGE_IN_YEARS`, `IS_STALE`) used by staging and the refresh | One definition, so the two can never disagree | Copy the expression in both places |
+| D14 | A new country needs only a `COUNTRY_MAP` row; its table is created automatically | Global program: adding a market should not need a code change | One hand-written DDL per country |
 
 ## Scale (billions of rows/day)
 
