@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 
 from skypoints.config import SnowflakeSettings
+from skypoints.silver.current import apply_batch
 from skypoints.silver.members import bronze_batch_dates, load_batch
 from skypoints.snowflake_conn import connect
 
@@ -26,6 +27,7 @@ def main(argv: list[str] | None = None) -> None:
             batches = bronze_batch_dates(conn.cursor())
         for batch_date in batches:  # oldest first, so later batches build on earlier ones
             load_batch(conn, settings.database, batch_date)
+            apply_batch(conn, settings.database, batch_date)
 
 
 if __name__ == "__main__":
