@@ -8,7 +8,7 @@ def test_validate_sql_renders_completely():
     assert "{{" not in sql
     assert "FROM MY.TEST_TABLE" in sql
     assert "'2024-01-15'::DATE" in sql
-    assert "> 90" in sql  # stale threshold
+    assert "IS_STALE(flight_dt, as_of, 90)" in sql  # stale threshold
 
 
 def test_load_sql_replaces_only_its_batch():

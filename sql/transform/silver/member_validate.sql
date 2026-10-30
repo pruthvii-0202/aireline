@@ -116,11 +116,9 @@ SELECT
     country_iso                                         AS COUNTRY_ISO,
     dob_dt                                              AS DOB,
     CASE n_active WHEN 'A' THEN TRUE WHEN 'I' THEN FALSE END AS IS_ACTIVE,
-    -- Whole years: subtract one if this year's birthday is still ahead of as_of.
-    DATEDIFF('year', dob_dt, as_of)
-        - IFF(DATEADD('year', DATEDIFF('year', dob_dt, as_of), dob_dt) > as_of, 1, 0) AS AGE,
+    {{ database }}.SILVER.AGE_IN_YEARS(dob_dt, as_of)  AS AGE,
     DATEDIFF('day', flight_dt, as_of)                   AS DAYS_SINCE_LAST_FLIGHT,
-    COALESCE(DATEDIFF('day', flight_dt, as_of) > {{ stale_days }}, TRUE) AS STALE_MEMBER,
+    {{ database }}.SILVER.IS_STALE(flight_dt, as_of, {{ stale_days }}) AS STALE_MEMBER,
     flight_dt IS NULL                                   AS NEVER_FLOWN,
     dq_flags                                            AS DQ_FLAGS,
     record_hash                                         AS RECORD_HASH,
