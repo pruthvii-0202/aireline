@@ -18,7 +18,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not integration'"
 markers = ["integration: needs a live Snowflake connection"]
 
 [tool.ruff]
