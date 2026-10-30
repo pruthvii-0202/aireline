@@ -23,8 +23,8 @@ JSON feed   ─► REDEMPTION_RAW (VARIANT) ─► REDEMPTION_TXN ─► join on
 | 1 | DDL: raw, staging, country tables | raw: [V003](sql/ddl/V003__bronze_tables.sql); staging: [V004](sql/ddl/V004__silver_member_tables.sql); country: [V005](sql/ddl/V005__silver_member_current_and_country_tables.sql) |
 | 2 | Staging + Age + Stale_Member | `SILVER.MEMBER_STG` via [member_validate.sql](sql/transform/silver/member_validate.sql) |
 | 3 | Country split, latest record wins | [member_current_merge.sql](sql/transform/silver/member_current_merge.sql) + [country_table_sync.sql](sql/transform/silver/country_table_sync.sql) |
-| 4 | Flatten JSON + join design | _todo_ |
-| 5 | Validations | members: rules in [member_validate.sql](sql/transform/silver/member_validate.sql), rejects in `SILVER.MEMBER_REJECT`; redemptions: _todo_ |
+| 4 | Flatten JSON + join design | [redemption_validate.sql](sql/transform/silver/redemption_validate.sql) → `SILVER.REDEMPTION_TXN`; join: see below |
+| 5 | Validations | members: rules in [member_validate.sql](sql/transform/silver/member_validate.sql), rejects in `SILVER.MEMBER_REJECT`; redemptions: [redemption_validate.sql](sql/transform/silver/redemption_validate.sql), rejects in `SILVER.REDEMPTION_REJECT` |
 
 ## Setup
 
@@ -87,3 +87,32 @@ Per batch, in one transaction:
 2. Refresh `AGE` / `STALE_MEMBER` for members not in the batch, writing only rows that change.
 3. For each country table (`MEMBER_US/IN/PH/CA/AU`, `MEMBER_UNMAPPED`): delete members who now
    belong elsewhere, then merge the members that belong here. Each member is in exactly one table.
+
+### Redemptions (Silver)
+
+`LATERAL FLATTEN(..., OUTER => TRUE)` turns each JSON line into one row per transaction
+(documents with an empty `redemptions` array are kept as one row so they can be logged).
+
+| Outcome | Rule |
+|---|---|
+| Reject | missing txn_id / member_id / partner; status not COMPLETED/PENDING/CANCELLED; miles not a whole number or <= 0; invalid or future txn date; txn_id already accepted (first wins, in this batch or an earlier one); document with no transactions (`EMPTY_REDEMPTIONS`) |
+| Keep + flag | status needed trimming/upper-casing; miles sent as a JSON string; invalid feed date |
+| Keep + `ORPHAN_MEMBER` | member_id not in `MEMBER_CURRENT` yet. Re-checked every batch; resolved when the member arrives (`ORPHAN_RESOLVED_BATCH`). See `V_REDEMPTION_ORPHAN`. |
+
+### Joining redemptions to members
+
+```sql
+SELECT r.TXN_ID, r.TXN_DATE, r.PARTNER, r.MILES_REDEEMED, r.STATUS,
+       m.MEMBER_NAME, m.COUNTRY_ISO, m.TIER_CODE, m.STALE_MEMBER
+FROM SILVER.REDEMPTION_TXN r
+LEFT JOIN SILVER.MEMBER_CURRENT m ON m.MEMBER_ID = r.MEMBER_ID;
+```
+
+- Join on `MEMBER_ID`, the global business key, to **`MEMBER_CURRENT`**, not the country tables:
+  it already carries the country, so there is no need to UNION five tables.
+- `LEFT JOIN` keeps orphan redemptions (member not arrived yet) visible instead of dropping them.
+- This gives the member's *current* country and tier. "Which country was the member in when
+  they redeemed?" needs the Gold SCD2 `DIM_MEMBER`, joined on
+  `TXN_DATE BETWEEN VALID_FROM AND VALID_TO`.
+- At scale, cluster `REDEMPTION_TXN` on `TXN_DATE` (queries filter by date) and let Snowflake
+  hash-join on `MEMBER_ID`.
