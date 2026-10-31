@@ -14,7 +14,12 @@ Redemptions are flattened to one row per transaction and joined back to members 
 member file ─► MEMBER_RAW ─► MEMBER_STG (typed, AGE, STALE_MEMBER) ─► MEMBER_CURRENT ─► TABLE_<COUNTRY>
                                    └─► MEMBER_REJECT (row + reason)
 JSON feed   ─► REDEMPTION_RAW (VARIANT) ─► REDEMPTION_TXN ─► join on member_id
+                                                      │
+Gold:  MEMBER_STG (every batch) ─► DIM_MEMBER (SCD2)  ▼
+       MEMBER_CURRENT + REDEMPTION_TXN ─► MEMBER_360 (one row per member)
 ```
+
+Design decisions and their alternatives: [docs/architecture.md](docs/architecture.md).
 
 ## Deliverables map
 
@@ -116,3 +121,47 @@ LEFT JOIN SILVER.MEMBER_CURRENT m ON m.MEMBER_ID = r.MEMBER_ID;
   `TXN_DATE BETWEEN VALID_FROM AND VALID_TO`.
 - At scale, cluster `REDEMPTION_TXN` on `TXN_DATE` (queries filter by date) and let Snowflake
   hash-join on `MEMBER_ID`.
+
+## Gold
+
+```powershell
+python -m skypoints.gold                      # DIM_MEMBER + MEMBER_360, as of the latest batch
+```
+
+Both tables are rebuilt from Silver in one transaction (`INSERT OVERWRITE`), so re-running
+gives the same rows.
+
+**`GOLD.DIM_MEMBER`**: SCD Type 2 member history. A new version opens when name, enrollment,
+tier, agent, state, country (ISO) or active flag changes, including a change back. Flights and
+AU/AUS aliases do not open versions. Version 1 is valid from `1900-01-01`, later versions
+from the batch that delivered them, until the day before the next one (`9999-12-31` while current).
+
+```sql
+-- Which country was the member in when they redeemed?
+SELECT r.TXN_ID, r.TXN_DATE, d.COUNTRY_ISO AS COUNTRY_AT_REDEMPTION, d.TIER_CODE
+FROM SILVER.REDEMPTION_TXN r
+JOIN GOLD.DIM_MEMBER d
+  ON d.MEMBER_ID = r.MEMBER_ID AND r.TXN_DATE BETWEEN d.VALID_FROM AND d.VALID_TO;
+```
+
+**`GOLD.MEMBER_360`**: one row per current member: profile, `AGE`, `STALE_MEMBER`, miles by
+status, average miles, last redemption, favourite partner (most redemptions, then most miles,
+then name), and:
+
+| Column | Rule |
+|---|---|
+| `LIFECYCLE_STATUS` | `NEVER_FLOWN`; `ACTIVE` flew within 30 days; `AT_RISK` 31–90; `DORMANT` over 90 |
+| `DORMANT_REDEEMER` | stale, but redeemed in the last 30 days: still engaged, worth a campaign |
+
+Cancelled redemptions count in `TXN_COUNT` only. Orphan redemptions are left out until their
+member arrives; completed miles reconcile with Silver (tested).
+
+## Tests
+
+```powershell
+pytest -q                 # unit tests, no Snowflake needed
+pytest -m integration     # Snowflake: rule edge cases in throwaway schemas + checks on generated data
+```
+
+Integration tests run the real SQL over hand-made rows in a throwaway schema (dropped
+afterwards), and check the generated data against the manifest, its answer key.

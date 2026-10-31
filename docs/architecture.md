@@ -25,7 +25,7 @@ GOLD     DIM_MEMBER (SCD Type 2)               MEMBER_360 (one row per member)
 | BRONZE | Exact copy of what arrived. Never updated or deleted. | `MEMBER_PROFILE_RAW`, `REDEMPTION_RAW` |
 | SILVER | Typed, validated, standardised, current. Holds the brief's staging and country tables. | `MEMBER_STG`, `MEMBER_REJECT`, `MEMBER_CURRENT`, `MEMBER_<ISO2>`, `MEMBER_UNMAPPED`, `REDEMPTION_TXN`, `REDEMPTION_REJECT` |
 | GOLD | Business-ready, history-aware. | `DIM_MEMBER`, `MEMBER_360` |
-| META | Operational logs. | `FILE_LOAD_LOG`, `PIPELINE_RUN_LOG` |
+| META | Operational logs. | `FILE_LOAD_LOG` |
 
 Every table carries audit columns: source file, source row number, batch date, load timestamp.
 
@@ -57,6 +57,12 @@ Every table carries audit columns: source file, source row number, batch date, l
 | D12 | Merge, refresh and every country-table sync for a batch run in one transaction | A reader never sees a member in two country tables, or in none, mid-move | Separate statements |
 | D13 | Age and staleness rules are SQL UDFs (`AGE_IN_YEARS`, `IS_STALE`) used by staging and the refresh | One definition, so the two can never disagree | Copy the expression in both places |
 | D14 | A new country needs only a `COUNTRY_MAP` row; its table is created automatically | Global program: adding a market should not need a code change | One hand-written DDL per country |
+| D15 | Gold tables are full rebuilds from Silver with `INSERT OVERWRITE`, both in one transaction | `MEMBER_STG` keeps every batch, so a rebuild is idempotent and replay-safe by construction; the overwrite is atomic | Incremental SCD2 `MERGE` per batch: more code and replay edge cases. Switch when a rebuild gets too slow (see Scale) |
+| D16 | `DIM_MEMBER` versions on name, enrollment, tier, agent, state, country ISO, DOB and active flag only | `LAST_FLIGHT_DATE` changes with every flight and `COUNTRY_RAW` flips between AU and AUS, so tracking them would create versions that mean nothing. AGE and STALE change daily without the member changing | Version on the whole `RECORD_HASH` (about one fake version per flight) |
+| D17 | Version 1 is valid from 1900-01-01; later versions from the batch that delivered them | Redemptions dated before a member's first feed (up to 10 days) must still join to a version; nothing earlier is known, so the first record is the best answer | `VALID_FROM` = first batch date (early redemptions find no version) |
+| D18 | `MEMBER_360` is driven from `MEMBER_CURRENT` with a LEFT JOIN to redemptions | Members with no redemptions get zeros; orphan redemptions stay in `V_REDEMPTION_ORPHAN` until the member arrives, so the miles still reconcile | Drive from redemptions (drops non-redeemers, needs a member for every row) |
+| D19 | `MEMBER_360` measures every day count to the latest batch date (`AS_OF_DATE`) | Same reason as D7: rebuilding for the same batch always gives the same answer | `CURRENT_DATE` |
+| D20 | Cancelled redemptions count in `TXN_COUNT` but not in recency or favourite partner | A cancellation is a transaction, not engagement | Count every status everywhere |
 
 ## Scale (billions of rows/day)
 
@@ -64,3 +70,6 @@ Every table carries audit columns: source file, source row number, batch date, l
 - Streams on Bronze tables so Silver processes only new rows; Tasks chain the steps.
 - `QUALIFY ROW_NUMBER()` dedupe and `MERGE` instead of full rebuilds.
 - Cluster large tables on `MEMBER_ID` (Silver) and date (Gold facts); size the warehouse up only for heavy steps.
+- Gold rebuilds (D15) become an incremental SCD2 `MERGE` per batch: close the open version
+  (`VALID_TO`, `IS_CURRENT = FALSE`) for members whose tracked hash changed, insert the new
+  one; `MEMBER_360` updates only members with new redemptions or a changed profile.
