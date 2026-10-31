@@ -61,3 +61,11 @@ def build_member_360(conn: Any, database: str, as_of: date, silver: str, gold: s
     ).fetchone()
     log.info("MEMBER_360 as of %s: %d members, %d completed miles", as_of, members, miles)
 
+
+def latest_batch_date(cur: Any, silver: str) -> date | None:
+    """The newest batch applied to Silver, from either feed."""
+    cur.execute(
+        f"SELECT MAX(d) FROM (SELECT MAX(LAST_BATCH_DATE) AS d FROM {silver}.MEMBER_CURRENT "
+        f"UNION ALL SELECT MAX(BATCH_DATE) FROM {silver}.REDEMPTION_TXN)"
+    )
+    return cur.fetchone()[0]
