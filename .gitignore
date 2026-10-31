@@ -6,6 +6,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# Editor: personal state. Shared settings live in skypoints-loyalty.code-workspace
+.vscode/
+
 # Secrets
 .env
 *.p8
