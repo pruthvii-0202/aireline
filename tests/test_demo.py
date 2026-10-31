@@ -18,10 +18,11 @@ def test_parse_queries_splits_on_titles_and_keeps_sql():
     ]
 
 
-def test_demo_sql_file_has_queries_with_placeholders_only_for_database():
+def test_demo_sql_file_is_plain_sql_that_runs_in_snowsight():
     queries = parse_queries(DEMO_SQL.read_text(encoding="utf-8"))
     assert len(queries) >= 8
     assert all(sql for _, sql in queries)
+    assert not any("{{" in sql for _, sql in queries)  # no placeholders to fill by hand
 
 
 def test_format_table_aligns_columns_and_shows_nulls():
