@@ -17,6 +17,9 @@ def connect(settings: SnowflakeSettings, use_database: bool = True) -> Any:
     """Open a connection. ``use_database=False`` for bootstrap, before the database exists."""
     import snowflake.connector  # optional extra: keeps unit tests free of the dependency
 
+    # The connector core warns on every connect off AWS (no instance metadata to read the
+    # region from) and when proxy variables are set; neither is actionable here.
+    logging.getLogger("snowflake.connector._core").setLevel(logging.ERROR)
     return snowflake.connector.connect(
         account=settings.account,
         user=settings.user,
@@ -25,6 +28,8 @@ def connect(settings: SnowflakeSettings, use_database: bool = True) -> Any:
         warehouse=settings.warehouse,
         database=settings.database if use_database else None,
         application="skypoints-pipeline",
+        # The current default, set explicitly as the connector asks (FutureWarning otherwise).
+        enable_server_session_keep_alive_auto_detection=True,
     )
 
 
