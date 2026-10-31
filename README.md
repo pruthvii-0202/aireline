@@ -36,9 +36,28 @@ Design decisions and their alternatives: [docs/architecture.md](docs/architectur
 ```powershell
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -e ".[dev,snowflake]"
 ruff check . ; pytest -q
 ```
+
+## Live demo
+
+```powershell
+.\scripts\demo.ps1            # every step from tests to Gold, pausing so you can explain each one
+.\scripts\demo.ps1 -Fresh     # drop and rebuild SKYPOINTS_DEMO first (proves it builds from zero)
+python -m skypoints.demo      # only the result queries (sql/demo/demo_queries.sql)
+```
+
+The demo always uses `SKYPOINTS_DEMO`, never the database in `.env`.
+
+## VS Code
+
+Open `skypoints-loyalty.code-workspace` (File > Open Workspace from File). It sets the
+`.venv` interpreter, pytest in the Testing view and ruff, and adds:
+
+- **Terminal > Run Task**: the live demo, lint + unit tests, integration tests, each pipeline step
+- **Run and Debug**: debug the generator, Bronze, Silver, Gold or the current test file
+- Recommended extensions (Python, Ruff, Snowflake, Git Graph, GitHub PRs)
 
 ## Sample data (simulated source system)
 

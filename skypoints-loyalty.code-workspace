@@ -1,0 +1,184 @@
+{
+	// Open with: File > Open Workspace from File... (or `code skypoints-loyalty.code-workspace`).
+	// Run anything from Terminal > Run Task..., debug from the Run and Debug view,
+	// and run tests from the Testing view.
+	"folders": [
+		{ "name": "skypoints-loyalty", "path": "." }
+	],
+
+	"settings": {
+		// Python: the project venv, pytest and ruff (same settings as pyproject.toml).
+		"python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+		"python.terminal.activateEnvironment": true,
+		"python.testing.pytestEnabled": true,
+		"python.testing.unittestEnabled": false,
+		"python.testing.pytestArgs": ["tests"],
+		"[python]": {
+			"editor.defaultFormatter": "charliermarsh.ruff",
+			"editor.codeActionsOnSave": { "source.organizeImports.ruff": "explicit" }
+		},
+		"editor.rulers": [100],
+		"files.trimTrailingWhitespace": true,
+		"files.insertFinalNewline": true,
+		"files.eol": "\n",
+
+		// Hide generated clutter; data/landing stays visible so the feeds can be opened.
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/.pytest_cache": true,
+			"**/.ruff_cache": true,
+			"**/*.egg-info": true
+		},
+		"search.exclude": { "**/.venv": true, "data/landing": true },
+
+		"terminal.integrated.defaultProfile.windows": "PowerShell",
+		"git.autofetch": true
+	},
+
+	"tasks": {
+		"version": "2.0.0",
+		"options": { "cwd": "${workspaceFolder}" },
+		"presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+		"tasks": [
+			{
+				"label": "Demo: live walkthrough (pauses at each step)",
+				"type": "shell",
+				"command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/demo.ps1",
+				"problemMatcher": []
+			},
+			{
+				"label": "Demo: rebuild from zero, no pauses",
+				"type": "shell",
+				"command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/demo.ps1 -Fresh -NoPause",
+				"problemMatcher": []
+			},
+			{
+				"label": "Demo: show result queries only",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m skypoints.demo",
+				"options": { "env": { "SNOWFLAKE_DATABASE": "SKYPOINTS_DEMO" } },
+				"problemMatcher": []
+			},
+			{
+				"label": "Test: lint + unit tests",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m ruff check . ; ${workspaceFolder}/.venv/Scripts/python.exe -m pytest -q",
+				"group": { "kind": "test", "isDefault": true },
+				"problemMatcher": []
+			},
+			{
+				"label": "Test: integration (Snowflake)",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m pytest -q -m integration -p no:logging",
+				"group": "test",
+				"problemMatcher": []
+			},
+			{
+				"label": "Snowflake: connection check",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m skypoints.snowflake_conn",
+				"problemMatcher": []
+			},
+			{
+				"label": "Pipeline 1: generate source feeds",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m skypoints.datagen --out data/landing --days 3 --members 1000 --seed 42",
+				"problemMatcher": []
+			},
+			{
+				"label": "Pipeline 2: apply DDL",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m skypoints.sql_runner",
+				"problemMatcher": []
+			},
+			{
+				"label": "Pipeline 3: Bronze load",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m skypoints.bronze --landing data/landing",
+				"problemMatcher": []
+			},
+			{
+				"label": "Pipeline 4: Silver",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m skypoints.silver",
+				"problemMatcher": []
+			},
+			{
+				"label": "Pipeline 5: Gold",
+				"type": "shell",
+				"command": "${workspaceFolder}/.venv/Scripts/python.exe -m skypoints.gold",
+				"problemMatcher": []
+			},
+			{
+				"label": "Pipeline: run all (DDL, Bronze, Silver, Gold)",
+				"dependsOrder": "sequence",
+				"dependsOn": [
+					"Pipeline 2: apply DDL",
+					"Pipeline 3: Bronze load",
+					"Pipeline 4: Silver",
+					"Pipeline 5: Gold"
+				],
+				"problemMatcher": []
+			}
+		]
+	},
+
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Debug: data generator",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "skypoints.datagen",
+				"args": ["--out", "data/landing", "--days", "3", "--members", "1000", "--seed", "42"],
+				"cwd": "${workspaceFolder}",
+				"justMyCode": true
+			},
+			{
+				"name": "Debug: Bronze loader",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "skypoints.bronze",
+				"cwd": "${workspaceFolder}",
+				"justMyCode": true
+			},
+			{
+				"name": "Debug: Silver",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "skypoints.silver",
+				"cwd": "${workspaceFolder}",
+				"justMyCode": true
+			},
+			{
+				"name": "Debug: Gold",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "skypoints.gold",
+				"cwd": "${workspaceFolder}",
+				"justMyCode": true
+			},
+			{
+				"name": "Debug: tests in current file",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "pytest",
+				"args": ["-q", "-m", "integration or not integration", "${file}"],
+				"cwd": "${workspaceFolder}",
+				"justMyCode": false
+			}
+		]
+	},
+
+	"extensions": {
+		"recommendations": [
+			"ms-python.python",
+			"ms-python.debugpy",
+			"charliermarsh.ruff",
+			"snowflake.snowflake-vsc",
+			"mhutchie.git-graph",
+			"github.vscode-pull-request-github"
+		]
+	}
+}
